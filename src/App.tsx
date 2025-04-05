@@ -1,7 +1,37 @@
-// App.tsx
 import React, { useEffect, useRef, useState } from "react";
 import * as faceapi from "face-api.js";
 import "./App.css";
+import { LabeledFaceDescriptors } from "face-api.js";
+
+// Loads all labeled face descriptors
+async function loadLabeledImages() {
+  const labels = ['ankit', 'jitendra']; // add more as needed
+
+  return Promise.all(
+    labels.map(async (label) => {
+      const descriptions = [];
+
+      for (let i = 1; i <= 2; i++) { // two images per person
+        const imgUrl = `/labeled_images/${label}/${i}.jpeg`;
+        const img = await faceapi.fetchImage(imgUrl);
+
+        const detections = await faceapi
+          .detectSingleFace(img)
+          .withFaceLandmarks()
+          .withFaceDescriptor();
+
+        if (!detections) {
+          console.warn(`No face detected in image: ${imgUrl}`);
+          continue;
+        }
+
+        descriptions.push(detections.descriptor);
+      }
+
+      return new faceapi.LabeledFaceDescriptors(label, descriptions);
+    })
+  );
+}
 
 interface DetectionOptions {
   faceDetection: boolean;
@@ -16,6 +46,9 @@ function App(): React.ReactElement {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [modelsLoaded, setModelsLoaded] = useState<boolean>(false);
   const [captureVideo, setCaptureVideo] = useState<boolean>(false);
+  const [labeledFaceDescriptors, setLabeledFaceDescriptors] = useState<LabeledFaceDescriptors[]>([]);
+  const [faceMatcher, setFaceMatcher] = useState<faceapi.FaceMatcher | null>(null);
+  const [detectionResults, setDetectionResults] = useState<any[]>([]);
   const [detectionOptions, setDetectionOptions] = useState<DetectionOptions>({
     faceDetection: true,
     landmarks: false,
@@ -23,22 +56,20 @@ function App(): React.ReactElement {
     age: false,
     gender: false,
   });
-  const [statusMessage, setStatusMessage] =
-    useState<string>("Loading models...");
-  const [detectionInterval, setDetectionInterval] = useState<number | null>(
-    null
-  );
+  const [statusMessage, setStatusMessage] = useState<string>("Loading models...");
+  const [detectionInterval, setDetectionInterval] = useState<number | null>(null);
 
-  // Load face-api models
-  useEffect(() => {
+    // Load face-api models
     const loadModels = async (): Promise<void> => {
       const MODEL_URL = "./models";
-
+    
       try {
         setStatusMessage("Loading face detection models...");
         await Promise.all([
+          faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL), // Added SsdMobilenetv1
           faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
           faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+          faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
           faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL),
           faceapi.nets.ageGenderNet.loadFromUri(MODEL_URL),
         ]);
@@ -54,22 +85,46 @@ function App(): React.ReactElement {
         console.error("Error loading models:", error);
       }
     };
+    useEffect(() => {
+  
+      loadModels();
+  
+      return () => {
+        // Cleanup
+        if (videoRef.current && videoRef.current.srcObject) {
+          const stream = videoRef.current.srcObject as MediaStream;
+          stream.getTracks().forEach((track) => track.stop());
+        }
+  
+        // Clear the detection interval if it exists
+        if (detectionInterval) {
+          clearInterval(detectionInterval);
+        }
+      };
+    }, []);
 
-    loadModels();
-
-    return () => {
-      // Cleanup
-      if (videoRef.current && videoRef.current.srcObject) {
-        const stream = videoRef.current.srcObject as MediaStream;
-        stream.getTracks().forEach((track) => track.stop());
-      }
-
-      // Clear the detection interval if it exists
-      if (detectionInterval) {
-        clearInterval(detectionInterval);
+  // Load labeled images for face recognition
+  useEffect(() => {
+    const initFaceRecognition = async () => {
+      await loadModels();
+      try {
+        const descriptors = await loadLabeledImages();
+        setLabeledFaceDescriptors(descriptors);
+        
+        if (descriptors.length > 0) {
+          const matcher = new faceapi.FaceMatcher(descriptors, 0.6);
+          setFaceMatcher(matcher);
+          console.log("Face recognition data loaded successfully");
+        }
+      } catch (error) {
+        console.error("Error loading labeled images:", error);
       }
     };
+    
+    initFaceRecognition();
   }, []);
+
+
 
   // Start video capture
   const startVideo = (): void => {
@@ -124,35 +179,11 @@ function App(): React.ReactElement {
         clearInterval(detectionInterval);
         setDetectionInterval(null);
       }
+      
+      // Clear detection results
+      setDetectionResults([]);
     }
   };
-
-  const [detectionResults, setDetectionResults] = useState<any[]>([]);
-
-  // 1. Make sure models are loaded before attempting detection
-  useEffect(() => {
-    const loadModels = async () => {
-      try {
-        // Specify the correct path to your models
-        const MODEL_URL = "/models"; // Adjust this to your actual models path
-
-        await Promise.all([
-          faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-          faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-          faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
-          faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL),
-          faceapi.nets.ageGenderNet.loadFromUri(MODEL_URL),
-        ]);
-
-        console.log("Face detection models loaded successfully");
-        setModelsLoaded(true);
-      } catch (error) {
-        console.error("Failed to load models:", error);
-      }
-    };
-
-    loadModels();
-  }, []);
 
   // Run detection when video is playing AND models are loaded
   useEffect(() => {
@@ -190,26 +221,24 @@ function App(): React.ReactElement {
         // Make sure the video is displayed in the canvas before detection
         ctx.drawImage(videoRef.current, 0, 0, videoWidth, videoHeight);
 
-        const options = new faceapi.TinyFaceDetectorOptions({
-          inputSize: 512,
-          scoreThreshold: 0.5,
-        });
-
         let detectionChain: any = faceapi.detectAllFaces(
-          canvas, // Use canvas instead of video for more reliable detection
-          options
+          canvas,
+          new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 })
         );
-
-        // if (detectionOptions.faceDetection) {
-        //   detectionChain = detectionChain.withFaceLandmarks();
-        // }
 
         if (detectionOptions.landmarks || detectionOptions.faceDetection) {
           detectionChain = detectionChain.withFaceLandmarks();
         }
+        
+        // Add face descriptor extraction if we have labeled faces
+        if (labeledFaceDescriptors.length > 0 && faceMatcher) {
+          detectionChain = detectionChain.withFaceDescriptors();
+        }
+        
         if (detectionOptions.expressions) {
           detectionChain = detectionChain.withFaceExpressions();
         }
+        
         if (detectionOptions.age || detectionOptions.gender) {
           detectionChain = detectionChain.withAgeAndGender();
         }
@@ -247,6 +276,7 @@ function App(): React.ReactElement {
 
           // Calculate vertical position for text based on which options are enabled
           let textYOffset = 0;
+          
           // Always draw the red rectangle for face detection
           if (detectionOptions.faceDetection && detection.detection) {
             faceapi.draw.drawDetections(canvas, resizedDetections);
@@ -256,8 +286,17 @@ function App(): React.ReactElement {
             ctx.strokeRect(x, y, width, height);
             ctx.fillStyle = "#FF0000";
             ctx.font = "16px Arial";
-            // ctx.fillText(`Face ${index + 1}`, x, y - 10);
             resultItem.faceDetected = true;
+            
+            // Try to identify the face if we have descriptors and matcher
+            if (detection.descriptor && faceMatcher) {
+              const match = faceMatcher.findBestMatch(detection.descriptor);
+              ctx.fillText(`${match.label}`, x-50, y - 10);
+              resultItem.label = match.label;
+              resultItem.distance = match.distance;
+            } else {
+              ctx.fillText(`Face ${index + 1}`, x, y - 10);
+            }
           }
 
           // Draw landmarks if enabled
@@ -333,8 +372,7 @@ function App(): React.ReactElement {
     return () => {
       clearInterval(intervalId);
     };
-  }, [captureVideo, detectionOptions, modelsLoaded]);
-  // ← This dependency array is key to fixing your issue!
+  }, [captureVideo, detectionOptions, modelsLoaded, labeledFaceDescriptors, faceMatcher]);
 
   // Toggle detection options
   const toggleOption = (option: keyof DetectionOptions): void => {
@@ -393,36 +431,33 @@ function App(): React.ReactElement {
             <div className="video-details">
               <h3>Video Stream Active</h3>
               <p>Face detection and analysis in progress...</p>
+              <ul>
+                {detectionResults.map((det, index) => (
+                  <li key={index}>
+                    <strong>{det.label || `Person ${index + 1}`}</strong>
+                    <br />
+                    {det.age && (
+                      <span>
+                        🧍 Age: {Math.round(det.age)}
+                        <br />
+                      </span>
+                    )}
+                    {det.gender && (
+                      <span>
+                        ⚧️ Gender: {det.gender} ({det.genderProbability}%)
+                        <br />
+                      </span>
+                    )}
+                    {det.dominantExpression && (
+                      <span>
+                        😄 Expression: {det.dominantExpression}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
-
-          {detectionResults.map((det, index) => (
-            <li key={index}>
-              <strong>Person {index + 1}</strong>
-              <br />
-              {det.age && (
-                <span>
-                  🧍 Age: {Math.round(det.age)}
-                  <br />
-                </span>
-              )}
-              {det.gender && (
-                <span>
-                  ⚧️ Gender: {det.gender} (
-                  {Math.round(det.genderProbability * 100)}%)
-                  <br />
-                </span>
-              )}
-              {det.expressions && (
-                <span>
-                  😄 Expression:{" "}
-                  {Object.keys(det.expressions).reduce((a, b) =>
-                    det.expressions[a] > det.expressions[b] ? a : b
-                  )}
-                </span>
-              )}
-            </li>
-          ))}
         </div>
 
         <div className="controls-panel">
