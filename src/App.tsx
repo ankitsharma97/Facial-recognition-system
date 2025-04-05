@@ -66,110 +66,110 @@ const [bottomTurn, setBottomTurn] = useState(0);
 const prevPositionRef = useRef({ x: 0, y: 0 }); // to store previous position
 
 // Inside detection interval or wherever you are processing detections:
-const detectFaceMovement = async () => {
-  if (videoRef.current && modelsLoaded) {
-    const detections = await faceapi.detectSingleFace(videoRef.current).withFaceLandmarks();
-    if (detections) {
-      const box = detections.detection.box;
-      const currentPosition = { x: box.x, y: box.y };
-
-      const dx = currentPosition.x - prevPositionRef.current.x;
-      const dy = currentPosition.y - prevPositionRef.current.y;
-
-      const threshold = 20; // movement threshold to ignore small noise
-
-      if (dx > threshold) {
-        setRightTurn((prev) => prev + 1);
-      } else if (dx < -threshold) {
-        setLeftTurn((prev) => prev + 1);
-      }
-
-      if (dy > threshold) {
-        setBottomTurn((prev) => prev + 1);
-      } else if (dy < -threshold) {
-        setTopTurn((prev) => prev + 1);
-      }
-
-      // update previous position
-      prevPositionRef.current = currentPosition;
-    }
-  }
-};
-
-
-// const lastDirectionRef = useRef('');
-// const movementCooldown = useRef(false);
-// const cooldownTime = 800;
-
-// const positionHistory = useRef<{x: number, y: number}[]>([]);
-
-// const getSmoothedPosition = (newPos: {x: number, y: number}) => {
-//   positionHistory.current.push(newPos);
-//   if (positionHistory.current.length > 5) {
-//     positionHistory.current.shift(); // keep last 5 positions
-//   }
-
-//   const avgX = positionHistory.current.reduce((acc, pos) => acc + pos.x, 0) / positionHistory.current.length;
-//   const avgY = positionHistory.current.reduce((acc, pos) => acc + pos.y, 0) / positionHistory.current.length;
-
-//   return { x: avgX, y: avgY };
-// };
-
-
 // const detectFaceMovement = async () => {
 //   if (videoRef.current && modelsLoaded) {
-//     const detection = await faceapi
-//       .detectSingleFace(videoRef.current)
-//       .withFaceLandmarks();
+//     const detections = await faceapi.detectSingleFace(videoRef.current).withFaceLandmarks();
+//     if (detections) {
+//       const box = detections.detection.box;
+//       const currentPosition = { x: box.x, y: box.y };
 
-//     if (detection) {
-//       const box = detection.detection.box;
+//       const dx = currentPosition.x - prevPositionRef.current.x;
+//       const dy = currentPosition.y - prevPositionRef.current.y;
 
-//       // Smooth the current box position
-//       const smoothedPos = getSmoothedPosition({ x: box.x, y: box.y });
+//       const threshold = 20; // movement threshold to ignore small noise
 
-//       // Calculate movement difference
-//       const dx = smoothedPos.x - prevPositionRef.current.x;
-//       const dy = smoothedPos.y - prevPositionRef.current.y;
-
-//       const threshold = 25;
-//       let direction = "";
-
-//       if (Math.abs(dx) > Math.abs(dy)) {
-//         direction = dx > threshold ? "right" : dx < -threshold ? "left" : "";
-//       } else {
-//         direction = dy > threshold ? "down" : dy < -threshold ? "up" : "";
+//       if (dx > threshold) {
+//         setRightTurn((prev) => prev + 1);
+//       } else if (dx < -threshold) {
+//         setLeftTurn((prev) => prev + 1);
 //       }
 
-//       if (direction && !movementCooldown.current && direction !== lastDirectionRef.current) {
-//         lastDirectionRef.current = direction;
-//         movementCooldown.current = true;
-
-//         switch (direction) {
-//           case "right":
-//             setRightTurn((prev) => prev + 1);
-//             break;
-//           case "left":
-//             setLeftTurn((prev) => prev + 1);
-//             break;
-//           case "up":
-//             setTopTurn((prev) => prev + 1);
-//             break;
-//           case "down":
-//             setBottomTurn((prev) => prev + 1);
-//             break;
-//         }
-
-//         setTimeout(() => {
-//           movementCooldown.current = false;
-//         }, cooldownTime);
+//       if (dy > threshold) {
+//         setBottomTurn((prev) => prev + 1);
+//       } else if (dy < -threshold) {
+//         setTopTurn((prev) => prev + 1);
 //       }
 
-//       // Always update previous position with smoothed one
-//       prevPositionRef.current = smoothedPos;
+//       // update previous position
+//       prevPositionRef.current = currentPosition;
 //     }
 //   }
 // };
+
+
+const lastDirectionRef = useRef('');
+const movementCooldown = useRef(false);
+const cooldownTime = 800;
+
+const positionHistory = useRef<{x: number, y: number}[]>([]);
+
+const getSmoothedPosition = (newPos: {x: number, y: number}) => {
+  positionHistory.current.push(newPos);
+  if (positionHistory.current.length > 5) {
+    positionHistory.current.shift(); // keep last 5 positions
+  }
+
+  const avgX = positionHistory.current.reduce((acc, pos) => acc + pos.x, 0) / positionHistory.current.length;
+  const avgY = positionHistory.current.reduce((acc, pos) => acc + pos.y, 0) / positionHistory.current.length;
+
+  return { x: avgX, y: avgY };
+};
+
+
+const detectFaceMovement = async () => {
+  if (videoRef.current && modelsLoaded) {
+    const detection = await faceapi
+      .detectSingleFace(videoRef.current)
+      .withFaceLandmarks();
+
+    if (detection) {
+      const box = detection.detection.box;
+
+      // Smooth the current box position
+      const smoothedPos = getSmoothedPosition({ x: box.x, y: box.y });
+
+      // Calculate movement difference
+      const dx = smoothedPos.x - prevPositionRef.current.x;
+      const dy = smoothedPos.y - prevPositionRef.current.y;
+
+      const threshold = 25;
+      let direction = "";
+
+      if (Math.abs(dx) > Math.abs(dy)) {
+        direction = dx > threshold ? "right" : dx < -threshold ? "left" : "";
+      } else {
+        direction = dy > threshold ? "down" : dy < -threshold ? "up" : "";
+      }
+
+      if (direction && !movementCooldown.current && direction !== lastDirectionRef.current) {
+        lastDirectionRef.current = direction;
+        movementCooldown.current = true;
+
+        switch (direction) {
+          case "right":
+            setRightTurn((prev) => prev + 1);
+            break;
+          case "left":
+            setLeftTurn((prev) => prev + 1);
+            break;
+          case "up":
+            setTopTurn((prev) => prev + 1);
+            break;
+          case "down":
+            setBottomTurn((prev) => prev + 1);
+            break;
+        }
+
+        setTimeout(() => {
+          movementCooldown.current = false;
+        }, cooldownTime);
+      }
+
+      // Always update previous position with smoothed one
+      prevPositionRef.current = smoothedPos;
+    }
+  }
+};
 
     // Load face-api models
     const loadModels = async (): Promise<void> => {
