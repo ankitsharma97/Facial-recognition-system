@@ -5,13 +5,13 @@ import { LabeledFaceDescriptors } from "face-api.js";
 
 // Loads all labeled face descriptors
 async function loadLabeledImages() {
-  const labels = ['ankit', 'jitendra']; // add more as needed
+  const labels = ['ankit', 'jitendra']; 
 
   return Promise.all(
     labels.map(async (label) => {
       const descriptions = [];
 
-      for (let i = 1; i <= 2; i++) { // two images per person
+      for (let i = 1; i <= 2; i++) { 
         const imgUrl = `/labeled_images/${label}/${i}.jpeg`;
         const img = await faceapi.fetchImage(imgUrl);
 
@@ -21,7 +21,7 @@ async function loadLabeledImages() {
           .withFaceDescriptor();
 
         if (!detections) {
-          console.warn(`No face detected in image: ${imgUrl}`);
+          // console.warn(`No face detected in image: ${imgUrl}`);
           continue;
         }
 
@@ -65,7 +65,8 @@ const [bottomTurn, setBottomTurn] = useState(0);
 
 const prevPositionRef = useRef({ x: 0, y: 0 }); // to store previous position
 
-// Inside detection interval or wherever you are processing detections:
+// using prevPosition and currentPosition to detect movement
+
 // const detectFaceMovement = async () => {
 //   if (videoRef.current && modelsLoaded) {
 //     const detections = await faceapi.detectSingleFace(videoRef.current).withFaceLandmarks();
@@ -97,6 +98,8 @@ const prevPositionRef = useRef({ x: 0, y: 0 }); // to store previous position
 // };
 
 
+
+// using prevPosition and currentPosition to detect movement with smoothing
 const lastDirectionRef = useRef('');
 const movementCooldown = useRef(false);
 const cooldownTime = 800;
@@ -178,14 +181,14 @@ const detectFaceMovement = async () => {
       try {
         setStatusMessage("Loading face detection models...");
         await Promise.all([
-          faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL), // Added SsdMobilenetv1
+          faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
           faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
           faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
           faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
           faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL),
           faceapi.nets.ageGenderNet.loadFromUri(MODEL_URL),
         ]);
-        console.log("Models loaded successfully!");
+        // console.log("Models loaded successfully!");
         setModelsLoaded(true);
         setStatusMessage('Models loaded! Click "Start Camera" to begin.');
       } catch (error) {
@@ -226,7 +229,7 @@ const detectFaceMovement = async () => {
         if (descriptors.length > 0) {
           const matcher = new faceapi.FaceMatcher(descriptors, 0.6);
           setFaceMatcher(matcher);
-          console.log("Face recognition data loaded successfully");
+          // console.log("Face recognition data loaded successfully");
         }
       } catch (error) {
         console.error("Error loading labeled images:", error);
@@ -297,7 +300,6 @@ const detectFaceMovement = async () => {
     }
   };
 
-  // Run detection when video is playing AND models are loaded
   useEffect(() => {
     if (
       !captureVideo ||
@@ -321,7 +323,7 @@ const detectFaceMovement = async () => {
       const videoWidth = videoRef.current.videoWidth;
       const videoHeight = videoRef.current.videoHeight;
 
-      // Store the canvas reference to a non-null variable after checking
+
       const canvas = canvasRef.current;
       canvas.width = videoWidth;
       canvas.height = videoHeight;
@@ -330,7 +332,7 @@ const detectFaceMovement = async () => {
       if (!ctx) return;
 
       try {
-        // Make sure the video is displayed in the canvas before detection
+
         ctx.drawImage(videoRef.current, 0, 0, videoWidth, videoHeight);
 
         let detectionChain: any = faceapi.detectAllFaces(
@@ -357,14 +359,11 @@ const detectFaceMovement = async () => {
 
         const detections = await detectionChain;
 
-        // Debug log to see if detections are being found
-        console.log(`Detected ${detections.length} faces`);
 
-        // Only clear the detection overlays, not the video
+
         const displaySize = { width: videoWidth, height: videoHeight };
         faceapi.matchDimensions(canvas, displaySize);
 
-        // Scale detections to match display size
         const resizedDetections = faceapi.resizeResults(
           detections,
           displaySize
@@ -376,7 +375,7 @@ const detectFaceMovement = async () => {
         // Redraw the video frame
         ctx.drawImage(videoRef.current, 0, 0, videoWidth, videoHeight);
 
-        // Create a new result list per run
+
         const newDetectionResults: any[] = [];
 
         // Process each detected face
@@ -386,10 +385,10 @@ const detectFaceMovement = async () => {
             box: detection.detection.box,
           };
 
-          // Calculate vertical position for text based on which options are enabled
+
           let textYOffset = 0;
           
-          // Always draw the red rectangle for face detection
+
           if (detectionOptions.faceDetection && detection.detection) {
             faceapi.draw.drawDetections(canvas, resizedDetections);
 
@@ -400,7 +399,7 @@ const detectFaceMovement = async () => {
             ctx.font = "16px Arial";
             resultItem.faceDetected = true;
             
-            // Try to identify the face if we have descriptors and matcher
+
             if (detection.descriptor && faceMatcher) {
               const match = faceMatcher.findBestMatch(detection.descriptor);
               ctx.fillText(`${match.label}`, x-50, y - 10);
@@ -479,7 +478,7 @@ const detectFaceMovement = async () => {
     };
 
     intervalId = window.setInterval(()=> {
-      detectFaceMovement(); // Call the face movement detection function
+      detectFaceMovement(); 
       runDetection(); 
     }, 100);
     setDetectionInterval(intervalId);
@@ -496,7 +495,7 @@ const detectFaceMovement = async () => {
         ...prev,
         [option]: !prev[option],
       };
-      console.log(`Option ${option} toggled to ${!prev[option]}`);
+      // console.log(`Option ${option} toggled to ${!prev[option]}`);
       return updated;
     });
   };
